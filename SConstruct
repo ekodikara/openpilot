@@ -96,8 +96,6 @@ lenv = {
 rpath = lenv["LD_LIBRARY_PATH"].copy()
 
 if arch == "larch64":
-  lenv["LD_LIBRARY_PATH"] += ['/data/data/com.termux/files/usr/lib']
-
   cpppath = [
     "#third_party/opencl/include",
   ]
@@ -145,7 +143,6 @@ else:
     libpath = [
       f"#third_party/acados/{arch}/lib",
       f"#third_party/libyuv/{arch}/lib",
-      f"#third_party/mapbox-gl-native-qt/{arch}",
       "/usr/lib",
       "/usr/local/lib",
     ]
@@ -196,6 +193,7 @@ env = Environment(
     "-Wno-c99-designator",
     "-Wno-reorder-init-list",
     "-Wno-error=unused-but-set-variable",
+    "-Wno-vla-cxx-extension",
   ] + cflags + ccflags,
 
   CPPPATH=cpppath + [
@@ -208,11 +206,12 @@ env = Environment(
     "#third_party/json11",
     "#third_party/linux/include",
     "#third_party/snpe/include",
-    "#third_party/mapbox-gl-native-qt/include",
     "#third_party/qrcode",
     "#third_party",
     "#cereal",
     "#opendbc/can",
+    "#third_party/maplibre-native-qt/include",
+    f"#third_party/maplibre-native-qt/{arch}/include"
   ],
 
   CC='clang',
@@ -318,7 +317,7 @@ try:
 except SCons.Errors.UserError:
   qt_env.Tool('qt')
 
-qt_env['CPPPATH'] += qt_dirs + ["#selfdrive/ui/qt/"]
+qt_env['CPPPATH'] += qt_dirs# + ["#selfdrive/ui/qt/"]
 qt_flags = [
   "-D_REENTRANT",
   "-DQT_NO_DEBUG",
@@ -331,7 +330,8 @@ qt_flags = [
   "-DQT_MESSAGELOGCONTEXT",
 ]
 qt_env['CXXFLAGS'] += qt_flags
-qt_env['LIBPATH'] += ['#selfdrive/ui']
+qt_env['LIBPATH'] += ['#selfdrive/ui', f"#third_party/maplibre-native-qt/{arch}/lib"]
+qt_env['RPATH'] += [Dir(f"#third_party/maplibre-native-qt/{arch}/lib").srcnode().abspath]
 qt_env['LIBS'] = qt_libs
 
 if GetOption("clazy"):
@@ -359,13 +359,6 @@ Export('common', 'gpucommon')
 # Build cereal and messaging
 SConscript(['cereal/SConscript'])
 
-cereal = [File('#cereal/libcereal.a')]
-messaging = [File('#cereal/libmessaging.a')]
-visionipc = [File('#cereal/libvisionipc.a')]
-messaging_python = [File('#cereal/messaging/messaging_pyx.so')]
-
-Export('cereal', 'messaging', 'messaging_python', 'visionipc')
-
 # Build other submodules
 SConscript([
   'body/board/SConscript',
@@ -384,25 +377,22 @@ SConscript([
 ])
 if arch != "Darwin":
   SConscript([
-    'system/camerad/SConscript',
     'system/sensord/SConscript',
     'system/logcatd/SConscript',
   ])
 
+if arch == "larch64":
+  SConscript(['system/camerad/SConscript'])
+
 # Build openpilot
 SConscript(['third_party/SConscript'])
 
-SConscript(['selfdrive/boardd/SConscript'])
-SConscript(['selfdrive/controls/lib/lateral_mpc_lib/SConscript'])
-SConscript(['selfdrive/controls/lib/longitudinal_mpc_lib/SConscript'])
-SConscript(['selfdrive/locationd/SConscript'])
-SConscript(['selfdrive/navd/SConscript'])
-SConscript(['selfdrive/modeld/SConscript'])
-SConscript(['selfdrive/ui/SConscript'])
+SConscript(['selfdrive/SConscript'])
 
-if arch in ['x86_64', 'aarch64', 'Darwin'] and Dir('#tools/cabana/').exists() and GetOption('extras'):
+if Dir('#tools/cabana/').exists() and GetOption('extras'):
   SConscript(['tools/replay/SConscript'])
-  SConscript(['tools/cabana/SConscript'])
+  if arch != "larch64":
+    SConscript(['tools/cabana/SConscript'])
 
 external_sconscript = GetOption('external_sconscript')
 if external_sconscript:
